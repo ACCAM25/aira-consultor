@@ -10,9 +10,15 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
-import Home from '@/pages/Home';
-import ProjectDashboard from '@/pages/ProjectDashboard';
-import FlowMap from '@/pages/FlowMap';
+import Projects from '@/pages/Projects';
+import NewProject from '@/pages/NewProject';
+import ProjectLayout from '@/pages/project/ProjectLayout';
+import Overview from '@/pages/project/Overview';
+import Journey from '@/pages/project/Journey';
+import Settings from '@/pages/project/Settings';
+import People from '@/pages/project/People';
+import RegisterPage from '@/pages/project/RegisterPage';
+import Dossier from '@/pages/project/Dossier';
 
 function App() {
   return (
@@ -26,10 +32,16 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-              <Route path="/" element={<ProjectDashboard />} />
-              <Route path="/casos" element={<Home />} />
-              <Route path="/mapa-do-fluxo" element={<FlowMap />} />
-              <Route path="/painel" element={<Navigate to="/" replace />} />
+              <Route path="/" element={<Projects />} />
+              <Route path="/novo" element={<NewProject />} />
+              <Route path="/projetos/:id" element={<ProjectLayout />}>
+                <Route index element={<Overview />} />
+                <Route path="jornada" element={<Journey />} />
+                <Route path="configuracao" element={<Settings />} />
+                <Route path="pessoas" element={<People />} />
+                <Route path="dossie" element={<Dossier />} />
+                <Route path=":register" element={<RegisterPage />} />
+              </Route>
             </Route>
             <Route path="*" element={<PageNotFound />} />
           </Routes>

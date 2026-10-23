@@ -1,5 +1,5 @@
 import React from "react";
-import BrandLogo from '@/components/ari/BrandLogo';
+import { BrandLogo } from '@/components/aira/AppShell';
 
 export default function AuthLayout({ icon: Icon, title, subtitle, footer, children }) {
   return (

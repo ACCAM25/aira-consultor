@@ -1,34 +1,40 @@
 # AIra Consultor
 
-Plataforma para conduzir projetos com o método AIra (Diagnóstico Express em cinco etapas, por enquanto).
-Migrada do Base44 em outubro de 2026.
+Sistema de gestão de projetos conduzidos com o método AIra (cânone 3.0, Manual de Implementação 3.0).
 
-## Arquitetura
+## O que o sistema faz
+
+- **Assistente de criação**: qualificação da demanda (passo 1), pergunta executiva com teste de qualidade (passo 2), modo de aplicação sugerido pelo tipo de objeto (passo 3) e prazo.
+- **Próximo passo**: o painel lê o estado do projeto e indica o que o método pede a seguir.
+- **Jornada F0–F6**: critérios de saída por fase, entregável mínimo, instrumentos e gates de referência; avançar com critérios em aberto exige exceção registrada.
+- **Registros (§24)**: evidências com grau de confiança, gaps com ranking 3V + (6 − E) + (6 − R), decisões, atas de gate, pendências, mudanças, encaminhamentos, papéis, instrumentos e entregáveis. Nada é apagado: arquivar mantém o histórico.
+- **Saúde metodológica**: verificação automática das não conformidades graves (§21.3).
+- **Dossiê e handoff**: montado a partir dos registros, com revisão de qualidade, Termo de Conclusão e encerramento formal. Imprime ou salva em PDF.
+- **Equipe**: líder, consultor, revisor e cliente (somente leitura), por projeto.
+- **Perfil setor público**: critérios adicionais (autoridade formal, controle externo, LGPD, Lei 14.133) sobre o mesmo cânone.
+- **Assistente AIra (Claude)**: revisão da pergunta executiva e rascunho do entregável da fase.
+
+## Onde está cada regra
+
+| Arquivo | Conteúdo |
+|---|---|
+| `src/canon/aira.js` | Fases, critérios, módulos, modos, gates, instrumentos, fórmula de prioridade e impressão digital SHA-256 |
+| `src/canon/registers.js` | Campos de cada registro |
+| `src/canon/engine.js` | Próximo passo e saúde metodológica |
+
+Mudou o cânone? Altere esses arquivos: a impressão digital muda e projetos antigos passam a exibir o alerta.
+
+## Infraestrutura
 
 | Camada | Onde roda | Pasta |
 |---|---|---|
 | Front-end (React + Vite + Tailwind) | Vercel | `src/` |
-| Banco, login e arquivos | Supabase (`aira-consultor`, região São Paulo) | `supabase/migrations/` |
-| Funções de análise com IA (Claude) | Supabase Edge Functions | `supabase/functions/` |
+| Banco, login, arquivos e RLS | Supabase `aira-consultor` (São Paulo) | `supabase/migrations/` |
+| Assistente de IA | Supabase Edge Function `aira-assist` | `supabase/functions/` |
 
-- `src/api/client.js` concentra o acesso a dados; as telas não falam com o Supabase diretamente.
-- Todas as leituras e gravações passam por RLS: cada usuário vê só os próprios casos; administradores veem a lista de todos os casos.
-- As funções usam o token do usuário (não a chave de serviço), então também respeitam o RLS.
-- Arquivos dos casos ficam no bucket privado `case-files`, em pastas por usuário.
+Secrets do Supabase (Edge Functions > Secrets): `ANTHROPIC_API_KEY` (obrigatório para o assistente) e `ANTHROPIC_MODEL` (opcional).
 
-## Funções
-
-| Função | O que faz |
-|---|---|
-| `analyze-case` | Conduz a etapa atual do Diagnóstico Express e grava o parecer |
-| `revalidate-objective` | Confronta o objetivo com documentos e informações novas |
-| `export-anamnesis` | Gera o PDF da anamnese |
-
-Secrets necessários no Supabase (Edge Functions > Secrets):
-- `ANTHROPIC_API_KEY` (obrigatório)
-- `ANTHROPIC_MODEL` (opcional; padrão `claude-sonnet-5-5`)
-
-## Rodar localmente
+## Desenvolvimento
 
 ```bash
 npm install
@@ -36,8 +42,4 @@ cp .env.example .env.local
 npm run dev
 ```
 
-## Publicar
-
-- Front-end: cada push na branch `main` publica na Vercel automaticamente.
-- Banco: novas migrations em `supabase/migrations/` (aplicar com `supabase db push` ou pelo painel).
-- Funções: `supabase functions deploy <nome>`.
+Cada push na `main` publica na Vercel.
