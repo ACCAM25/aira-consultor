@@ -4,6 +4,7 @@ import { extractWithClaude, type SourceFile } from '../_shared/claude.ts';
 const SYSTEM = `Você lê documentos de projetos (entrevistas, atas, transcrições, relatórios, políticas) para o método AIra, cânone 3.0, e propõe registros para um consultor revisar. Escreva em português do Brasil.
 Regras que você nunca viola:
 - Use SOMENTE o que está escrito nos documentos. Cada proposta traz o nome do documento e um trecho literal curto (até 300 caracteres) que a sustenta. Sem trecho, não proponha.
+- Para cada campo, responda quando o documento tratar do assunto, mesmo com outras palavras (por exemplo, "quem bate o martelo" responde quem tem autoridade para decidir). Se nada no documento tratar do campo, omita o campo: ele ficará em branco para preenchimento manual. Nunca preencha por suposição.
 - Nunca invente, estime ou arredonde números. Dimensão de gap só quando o número estiver escrito; caso contrário deixe em branco e crie uma pendência dizendo qual dado levantar.
 - Declaração de entrevistado orienta investigação, não comprova: evidência de entrevista ou workshop tem confiança "baixo" (relato isolado) ou "medio" (corroborado por mais de uma fonte). "alto" só para documento formal, atual e autorizado.
 - Registre divergências entre fontes sem escolher silenciosamente uma delas.
@@ -16,12 +17,20 @@ const SCHEMA = {
   type: 'object',
   properties: {
     resumo: { type: 'string', description: 'Até 5 linhas: o que os documentos tratam e suas principais lacunas.' },
+    projeto: {
+      type: 'object', description: 'Identificação, somente quando os documentos indicarem.',
+      properties: {
+        nome: { type: 'object', properties: { valor: { type: 'string', description: 'Nome curto e descritivo do projeto ou iniciativa.' }, fonte: quote }, required: ['valor', 'fonte'] },
+        cliente: { type: 'object', properties: { valor: { type: 'string', description: 'Organização cliente.' }, fonte: quote }, required: ['valor', 'fonte'] },
+        setor: { type: 'object', properties: { valor: { type: 'string', enum: ['publico', 'privado'] }, fonte: quote }, required: ['valor', 'fonte'] },
+      },
+    },
     demanda: {
       type: 'object', description: 'Respostas às perguntas mínimas de qualificação, somente quando os documentos responderem.',
       properties: Object.fromEntries(['decidir', 'objeto', 'afetados', 'autoridade', 'evidencias', 'prazo', 'expectativa'].map(k => [k, { type: 'object', properties: { resposta: { type: 'string' }, fonte: quote }, required: ['resposta', 'fonte'] }])),
     },
     pergunta_executiva: { type: 'object', properties: { texto: { type: 'string' }, justificativa: { type: 'string' } } },
-    tipo_objeto: { type: 'string', enum: ['ambiente', 'processo', 'oportunidade', 'aquisicao', 'solucao', 'portfolio', ''] },
+    tipo_objeto: { type: 'string', enum: ['ambiente', 'processo', 'oportunidade', 'aquisicao', 'solucao', 'portfolio', ''], description: 'ambiente = maturidade organizacional; processo = processo ou tarefas; oportunidade = caso de uso; aquisicao = compra de solução ou fornecedor; solucao = solução em desenho, piloto ou produção; portfolio = jornada completa. Vazio se não for possível identificar.' },
     evidencias: { type: 'array', items: { type: 'object', properties: {
       titulo: { type: 'string' }, descricao: { type: 'string' },
       fonte_tipo: { type: 'string', enum: ['Políticas, normas e procedimentos', 'Registros de sistemas e relatórios', 'Contratos e documentos de fornecedor', 'Arquitetura, inventário ou documentação técnica', 'Entrevistas e workshops', 'Observação de processo', 'Indicadores e séries históricas', 'Testes e laudos de profissionais competentes', 'Logs, amostras e registros de operação', 'Decisões e aprovações formais'] },

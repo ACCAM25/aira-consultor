@@ -20,6 +20,7 @@ export default function NewProject() {
   const [docs, setDocs] = useState([]);
   const [docError, setDocError] = useState(null);
   const [draftId, setDraftId] = useState(null);
+  const [sectorTouched, setSectorTouched] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [ai, setAi] = useState(null); // { result, files }
   const [form, setForm] = useState({ name: '', client_name: '', sector: 'privado', object_type: '', demand: {}, executive_question: '', question_checks: {}, mode: '', start_date: '', end_date: '' });
@@ -52,7 +53,7 @@ export default function NewProject() {
     try {
       let id = draftId;
       if (!id) {
-        const draft = await createProject({ name: form.name.trim(), client_name: form.client_name.trim(), sector: form.sector, current_phase: 'F0', canon_version: CANON_VERSION, canon_hash: await canonHash(), config: { draft: true } });
+        const draft = await createProject({ name: form.name.trim() || 'Projeto em preparação', client_name: form.client_name.trim() || 'Cliente a definir', sector: form.sector, current_phase: 'F0', canon_version: CANON_VERSION, canon_hash: await canonHash(), config: { draft: true } });
         id = draft.id; setDraftId(id);
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
@@ -68,6 +69,9 @@ export default function NewProject() {
         Object.entries(p.demanda || {}).forEach(([k, v]) => { if (v?.resposta && !String(demand[k] || '').trim()) demand[k] = v.resposta; });
         return {
           ...f, demand,
+          name: f.name.trim() ? f.name : (p.projeto?.nome?.valor || ''),
+          client_name: f.client_name.trim() ? f.client_name : (p.projeto?.cliente?.valor || ''),
+          sector: !sectorTouched && p.projeto?.setor?.valor ? p.projeto.setor.valor : f.sector,
           object_type: f.object_type || p.tipo_objeto || '',
           executive_question: f.executive_question.trim() ? f.executive_question : (p.pergunta_executiva?.texto || ''),
         };
@@ -102,6 +106,35 @@ export default function NewProject() {
     } catch (e) { setError(e); setBusy(false); }
   }
 
+  const docsPanel = (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Sparkles className="h-4 w-4" />Começar pelas entrevistas e documentos (opcional)</p>
+                <p className="mt-1 text-sm text-blue-950/80">Anexe as entrevistas, atas ou transcrições e clique em Preencher com o AIra. Ele preenche cada campo que os documentos responderem, mostrando o trecho de origem; o que não encontrar fica em branco para você completar. Evidências, pessoas, gaps e pendências chegam para revisão depois de criar o projeto.</p>
+                {docs.length > 0 && <ul className="mt-3 space-y-1.5">{docs.map((d, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-1.5 text-sm"><span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{d.name}</span></span><button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} aria-label="Remover" className="rounded p-1 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></li>
+                ))}</ul>}
+                {docs.length < 6 && (
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50">
+                    <Upload className="h-4 w-4" />Anexar documentos
+                    <input type="file" multiple accept=".pdf,.docx,.txt,.md,.vtt,.srt" className="sr-only" onChange={e => { addDocs(e.target.files); e.target.value = ''; }} />
+                  </label>
+                )}
+                {docs.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-blue-200 pt-3">
+                    <Btn type="button" onClick={fillWithAi} disabled={aiBusy}>{aiBusy ? <Loader2 className="animate-spin" /> : <Sparkles />}{aiBusy ? 'Lendo os documentos…' : ai ? 'Ler de novo' : 'Preencher com o AIra'}</Btn>
+                    {aiBusy && <span className="text-xs text-blue-950/70">Pode levar até 2 minutos.</span>}
+                    {ai && !aiBusy && <span className="flex items-center gap-1.5 text-sm text-emerald-800"><Check className="h-4 w-4" />Campos preenchidos onde os documentos responderam. Revise em cada etapa.</span>}
+                  </div>
+                )}
+                {docError && <p className="mt-2 text-sm text-rose-700">{docError.message}</p>}
+              </div>
+  );
+
+  const missing = value => (ai && !String(value || '').trim() ? 'Não encontrado nos documentos: preencha manualmente.' : undefined);
+  const aiHint = (src, value) => (src?.fonte?.trecho && value && value === (src.valor ?? src.resposta ?? src.texto) ? `AIra, de ${src.fonte.documento}: “${src.fonte.trecho}”` : undefined);
+  const aiClass = (src, value) => (src && value && value === (src.valor ?? src.resposta ?? src.texto) ? 'border-blue-300 bg-blue-50/40' : undefined);
+  const pp = ai?.result?.proposals || {};
+
   return (
     <AppShell crumb="Novo projeto">
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
@@ -119,12 +152,13 @@ export default function NewProject() {
           {step === 0 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">Quem é o cliente e qual é o projeto?</h1><p className="mt-1 text-sm text-muted-foreground">Passo 1 do método: qualificar a demanda.</p></div>
-              <Field label="Nome do projeto" required><TextInput autoFocus value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex.: Governança de IA generativa na produção de atos" /></Field>
-              <Field label="Organização cliente" required><TextInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Ex.: Tribunal de Justiça do Maranhão" /></Field>
-              <Field label="Setor" group>
+              {docsPanel}
+              <Field label="Nome do projeto" required hint={aiHint(pp.projeto?.nome, form.name) || missing(form.name)}><TextInput className={aiClass(pp.projeto?.nome, form.name)} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex.: Governança de IA generativa na produção de atos" /></Field>
+              <Field label="Organização cliente" required hint={aiHint(pp.projeto?.cliente, form.client_name) || missing(form.client_name)}><TextInput className={aiClass(pp.projeto?.cliente, form.client_name)} value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Ex.: Tribunal de Justiça do Maranhão" /></Field>
+              <Field label="Setor" group hint={pp.projeto?.setor?.valor ? `AIra, de ${pp.projeto.setor.fonte?.documento}: “${pp.projeto.setor.fonte?.trecho}”` : undefined}>
                 <div className="grid grid-cols-2 gap-2">
                   {[['privado', 'Privado'], ['publico', 'Público']].map(([id, name]) => (
-                    <button type="button" key={id} onClick={() => set('sector', id)} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.sector === id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{name}</button>
+                    <button type="button" key={id} onClick={() => { set('sector', id); setSectorTouched(true); }} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.sector === id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{name}</button>
                   ))}
                 </div>
               </Field>
@@ -135,28 +169,8 @@ export default function NewProject() {
           {step === 1 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">O que está em jogo?</h1><p className="mt-1 text-sm text-muted-foreground">Responda o que já souber. Lacunas ficam registradas como pendências, sem problema.</p></div>
-              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Sparkles className="h-4 w-4" />Tem entrevistas, atas ou transcrições?</p>
-                <p className="mt-1 text-sm text-blue-950/80">Anexe aqui. Ao criar o projeto, o AIra lê os documentos e propõe as respostas abaixo, a pergunta executiva, evidências, pessoas, gaps e pendências, com o trecho de origem. Você revisa antes de aplicar. Com documentos, os campos abaixo podem ficar em branco.</p>
-                {docs.length > 0 && <ul className="mt-3 space-y-1.5">{docs.map((d, i) => (
-                  <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-1.5 text-sm"><span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{d.name}</span></span><button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} aria-label="Remover" className="rounded p-1 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></li>
-                ))}</ul>}
-                {docs.length < 6 && (
-                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50">
-                    <Upload className="h-4 w-4" />Anexar documentos
-                    <input type="file" multiple accept=".pdf,.docx,.txt,.md,.vtt,.srt" className="sr-only" onChange={e => { addDocs(e.target.files); e.target.value = ''; }} />
-                  </label>
-                )}
-                {docs.length > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-blue-200 pt-3">
-                    <Btn type="button" onClick={fillWithAi} disabled={aiBusy}>{aiBusy ? <Loader2 className="animate-spin" /> : <Sparkles />}{aiBusy ? 'Lendo os documentos…' : ai ? 'Ler de novo' : 'Preencher com o AIra'}</Btn>
-                    {aiBusy && <span className="text-xs text-blue-950/70">Pode levar até 2 minutos.</span>}
-                    {ai && !aiBusy && <span className="flex items-center gap-1.5 text-sm text-emerald-800"><Check className="h-4 w-4" />Campos preenchidos. Revise abaixo; o restante (evidências, pessoas, gaps) aparece após criar o projeto.</span>}
-                  </div>
-                )}
-                {docError && <p className="mt-2 text-sm text-rose-700">{docError.message}</p>}
-              </div>
-              <Field label="Tipo de objeto" required={!docs.length} group>
+              {!ai && docs.length > 0 && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">Você anexou documentos sem pedir a leitura. Volte à etapa anterior e clique em Preencher com o AIra, ou continue: a leitura acontece ao criar o projeto.</p>}
+              <Field label="Tipo de objeto" required={!docs.length} group hint={missing(form.object_type)}>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {OBJECT_TYPES.map(o => (
                     <button type="button" key={o.id} onClick={() => set('object_type', o.id)} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.object_type === o.id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{o.name}</button>
@@ -167,7 +181,7 @@ export default function NewProject() {
                 const src = ai?.result?.proposals?.demanda?.[q.id];
                 const fromAi = src?.resposta && form.demand[q.id] === src.resposta;
                 return (
-                  <Field key={q.id} label={q.text} hint={fromAi && src.fonte?.trecho ? `AIra, de ${src.fonte.documento}: “${src.fonte.trecho}”` : undefined}>
+                  <Field key={q.id} label={q.text} hint={fromAi && src.fonte?.trecho ? `AIra, de ${src.fonte.documento}: “${src.fonte.trecho}”` : missing(form.demand[q.id])}>
                     <TextArea rows={2} className={fromAi ? 'border-blue-300 bg-blue-50/40' : undefined} value={form.demand[q.id] || ''} onChange={e => set('demand', { ...form.demand, [q.id]: e.target.value })} />
                   </Field>
                 );
@@ -178,7 +192,7 @@ export default function NewProject() {
           {step === 2 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">Qual é a pergunta executiva?</h1><p className="mt-1 text-sm text-muted-foreground">Uma pergunta decisória por projeto (§2.1). Se ela não puder ser formulada, o trabalho ainda está em pré-venda.</p></div>
-              <Field label="Pergunta executiva" required={!docs.length} hint={docs.length ? 'Pode deixar em branco: o AIra propõe uma a partir dos documentos.' : undefined}><TextArea rows={3} autoFocus value={form.executive_question} onChange={e => set('executive_question', e.target.value)} placeholder={QUESTION_EXAMPLES[1]} /></Field>
+              <Field label="Pergunta executiva" required={!docs.length} hint={ai ? (form.executive_question && form.executive_question === pp.pergunta_executiva?.texto ? `Proposta do AIra: ${pp.pergunta_executiva.justificativa || 'derivada dos documentos'}` : missing(form.executive_question)) : docs.length ? 'Pode deixar em branco: o AIra propõe uma a partir dos documentos.' : undefined}><TextArea rows={3} autoFocus value={form.executive_question} onChange={e => set('executive_question', e.target.value)} placeholder={QUESTION_EXAMPLES[1]} /></Field>
               <details className="rounded-xl bg-muted/60 px-4 py-3 text-sm"><summary className="cursor-pointer font-medium">Exemplos do método</summary><ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">{QUESTION_EXAMPLES.map(e => <li key={e}><button type="button" className="text-left hover:text-foreground" onClick={() => set('executive_question', e)}>{e}</button></li>)}</ul></details>
               <div>
                 <p className="mb-2 text-sm font-medium">Teste de qualidade da pergunta <span className="font-normal text-muted-foreground">({testsDone} de {QUESTION_TESTS.length})</span></p>
