@@ -69,7 +69,7 @@ const SCHEMA = {
       impacto: { type: 'string' }, responsavel_sugerido: { type: 'string' }, fonte: quote,
     }, required: ['titulo', 'impacto'] } },
   },
-  required: ['resumo', 'evidencias', 'pessoas', 'gaps', 'pendencias'],
+  required: ['resumo', 'demanda', 'evidencias', 'pessoas', 'gaps', 'pendencias'],
 };
 
 Deno.serve(handle(async (req) => {
