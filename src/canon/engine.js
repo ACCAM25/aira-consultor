@@ -41,6 +41,10 @@ export function nextSteps(project, records) {
   } else if (q.done < q.total) {
     steps.push({ id: 'teste', title: 'Complete o teste de qualidade da pergunta', why: `${q.done} de ${q.total} critérios atendidos (§3.2).`, to: `${base}/configuracao`, action: 'Revisar pergunta' });
   }
+  const demand = project.config?.demand || {};
+  if (!Object.values(demand).some(v => String(v || '').trim())) {
+    steps.push({ id: 'demanda', title: 'Qualifique a demanda', why: 'Anexe entrevistas, atas ou transcrições e o AIra propõe as respostas com o trecho de origem; ou responda em Configuração.', to: `${base}/leitura`, action: 'Ler documentos' });
+  }
   const roles = new Set(people.map(p => p.data?.papel));
   if (!roles.has('sponsor') || !roles.has('autoridade')) {
     steps.push({ id: 'papeis', title: 'Nomeie o sponsor e a autoridade decisória', why: 'Não se inicia a coleta principal sem sponsor e autoridade (§4.4).', to: `${base}/pessoas`, action: 'Registrar pessoas' });

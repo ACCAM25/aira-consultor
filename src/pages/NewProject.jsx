@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, FileText, Loader2, Sparkles, Upload, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import AppShell from '@/components/aira/AppShell';
 import { Btn, CheckRow, ErrorNote, Field, Pill, TextArea, TextInput } from '@/components/aira/kit';
-import { createProject } from '@/api/data';
+import { createProject, uploadProjectFile } from '@/api/data';
 import { CANON_VERSION, DEMAND_QUESTIONS, MODES, OBJECT_TYPES, defaultModules, QUESTION_EXAMPLES, QUESTION_TESTS, canonHash } from '@/canon/aira';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +17,8 @@ export default function NewProject() {
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [docs, setDocs] = useState([]);
+  const [docError, setDocError] = useState(null);
   const [form, setForm] = useState({ name: '', client_name: '', sector: 'privado', object_type: '', demand: {}, executive_question: '', question_checks: {}, mode: '', start_date: '', end_date: '' });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const suggested = SUGGESTED_MODE[form.object_type];
@@ -25,11 +27,20 @@ export default function NewProject() {
 
   const canNext = useMemo(() => [
     form.name.trim() && form.client_name.trim(),
-    !!form.object_type,
-    form.executive_question.trim().length > 10,
+    !!form.object_type || docs.length > 0,
+    form.executive_question.trim().length > 10 || docs.length > 0,
     !!form.mode,
     !!form.start_date && !!form.end_date && form.end_date >= form.start_date,
-  ][step], [form, step]);
+  ][step], [form, step, docs.length]);
+
+  function addDocs(list) {
+    setDocError(null);
+    const incoming = Array.from(list);
+    const bad = incoming.find(f => !/\.(pdf|docx|txt|md|vtt|srt)$/i.test(f.name) || f.size > 20 * 1024 * 1024);
+    if (bad) return setDocError(new Error(`${bad.name}: use PDF, DOCX ou TXT de até 20 MB.`));
+    if (docs.length + incoming.length > 6) return setDocError(new Error('Envie até 6 arquivos.'));
+    setDocs(prev => [...prev, ...incoming]);
+  }
 
   async function finish() {
     setBusy(true); setError(null);
@@ -37,14 +48,20 @@ export default function NewProject() {
       const m = MODES.find(x => x.id === form.mode);
       const project = await createProject({
         name: form.name.trim(), client_name: form.client_name.trim(), sector: form.sector,
-        executive_question: form.executive_question.trim(),
+        executive_question: form.executive_question.trim() || null,
         start_date: form.start_date, end_date: form.end_date,
         current_phase: m.phases[0],
         canon_version: CANON_VERSION, canon_hash: await canonHash(),
         config: { mode: m.id, object_type: form.object_type, demand: form.demand, question_checks: form.question_checks, phases: m.phases, modules: defaultModules(m), exclusions: [], kickoff: {} },
       });
       qc.invalidateQueries({ queryKey: ['projects'] });
-      navigate(`/projetos/${project.id}`);
+      if (docs.length) {
+        const uploaded = [];
+        for (const d of docs) uploaded.push(await uploadProjectFile(project.id, d));
+        navigate(`/projetos/${project.id}/leitura`, { state: { files: uploaded, autoRead: true } });
+      } else {
+        navigate(`/projetos/${project.id}`);
+      }
     } catch (e) { setError(e); setBusy(false); }
   }
 
@@ -81,7 +98,21 @@ export default function NewProject() {
           {step === 1 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">O que está em jogo?</h1><p className="mt-1 text-sm text-muted-foreground">Responda o que já souber. Lacunas ficam registradas como pendências, sem problema.</p></div>
-              <Field label="Tipo de objeto" required group>
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Sparkles className="h-4 w-4" />Tem entrevistas, atas ou transcrições?</p>
+                <p className="mt-1 text-sm text-blue-950/80">Anexe aqui. Ao criar o projeto, o AIra lê os documentos e propõe as respostas abaixo, a pergunta executiva, evidências, pessoas, gaps e pendências, com o trecho de origem. Você revisa antes de aplicar. Com documentos, os campos abaixo podem ficar em branco.</p>
+                {docs.length > 0 && <ul className="mt-3 space-y-1.5">{docs.map((d, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-1.5 text-sm"><span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{d.name}</span></span><button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} aria-label="Remover" className="rounded p-1 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></li>
+                ))}</ul>}
+                {docs.length < 6 && (
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-50">
+                    <Upload className="h-4 w-4" />Anexar documentos
+                    <input type="file" multiple accept=".pdf,.docx,.txt,.md,.vtt,.srt" className="sr-only" onChange={e => { addDocs(e.target.files); e.target.value = ''; }} />
+                  </label>
+                )}
+                {docError && <p className="mt-2 text-sm text-rose-700">{docError.message}</p>}
+              </div>
+              <Field label="Tipo de objeto" required={!docs.length} group>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {OBJECT_TYPES.map(o => (
                     <button type="button" key={o.id} onClick={() => set('object_type', o.id)} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.object_type === o.id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{o.name}</button>
@@ -97,7 +128,7 @@ export default function NewProject() {
           {step === 2 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">Qual é a pergunta executiva?</h1><p className="mt-1 text-sm text-muted-foreground">Uma pergunta decisória por projeto (§2.1). Se ela não puder ser formulada, o trabalho ainda está em pré-venda.</p></div>
-              <Field label="Pergunta executiva" required><TextArea rows={3} autoFocus value={form.executive_question} onChange={e => set('executive_question', e.target.value)} placeholder={QUESTION_EXAMPLES[1]} /></Field>
+              <Field label="Pergunta executiva" required={!docs.length} hint={docs.length ? 'Pode deixar em branco: o AIra propõe uma a partir dos documentos.' : undefined}><TextArea rows={3} autoFocus value={form.executive_question} onChange={e => set('executive_question', e.target.value)} placeholder={QUESTION_EXAMPLES[1]} /></Field>
               <details className="rounded-xl bg-muted/60 px-4 py-3 text-sm"><summary className="cursor-pointer font-medium">Exemplos do método</summary><ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">{QUESTION_EXAMPLES.map(e => <li key={e}><button type="button" className="text-left hover:text-foreground" onClick={() => set('executive_question', e)}>{e}</button></li>)}</ul></details>
               <div>
                 <p className="mb-2 text-sm font-medium">Teste de qualidade da pergunta <span className="font-normal text-muted-foreground">({testsDone} de {QUESTION_TESTS.length})</span></p>

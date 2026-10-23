@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Loader2, Play, Plus, Trash2 } from 'lucide-react';
+import { Link, useOutletContext } from 'react-router-dom';
+import { Loader2, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Btn, CheckRow, ErrorNote, Field, PageTitle, Panel, Pill, Select, TextArea, TextInput } from '@/components/aira/kit';
 import AiraAssist from '@/components/aira/AiraAssist';
 import { useUpdateProject } from '@/api/data';
@@ -68,7 +68,7 @@ export default function Settings() {
           <div className="mt-3 grid gap-0.5 sm:grid-cols-2">{QUESTION_TESTS.map(t => <CheckRow key={t.id} disabled={readOnly} checked={cfg.question_checks?.[t.id]} onChange={v => setCfg('question_checks', { ...cfg.question_checks, [t.id]: v })}>{t.text}</CheckRow>)}</div>
         </Panel>
 
-        <Panel title="Qualificação da demanda" description="Perguntas mínimas do passo 1.">
+        <Panel title="Qualificação da demanda" description="Perguntas mínimas do passo 1." action={!readOnly && <Link to="../leitura"><Btn variant="soft" size="sm"><Sparkles />Preencher com documentos (IA)</Btn></Link>}>
           <div className="grid gap-4 sm:grid-cols-2">{DEMAND_QUESTIONS.map(q => <Field key={q.id} label={q.text}><TextArea rows={2} disabled={readOnly} value={cfg.demand?.[q.id] || ''} onChange={e => setCfg('demand', { ...cfg.demand, [q.id]: e.target.value })} /></Field>)}</div>
         </Panel>
 

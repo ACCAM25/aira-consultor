@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { CheckCircle2, FileText, Loader2, Sparkles, Upload, X } from 'lucide-react';
 import { Btn, ErrorNote, PageTitle, Panel, Pill } from '@/components/aira/kit';
 import { readDocuments, uploadProjectFile, useSaveRecord, useUpdateProject } from '@/api/data';
@@ -35,7 +35,10 @@ export default function DocumentReader() {
   const { project, readOnly } = useOutletContext();
   const save = useSaveRecord(project.id);
   const update = useUpdateProject(project.id);
-  const [files, setFiles] = useState([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [files, setFiles] = useState(() => location.state?.files || []);
+  const autoStarted = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [reading, setReading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -45,6 +48,14 @@ export default function DocumentReader() {
   const [conf, setConf] = useState({});
   const [registerDocs, setRegisterDocs] = useState(true);
   const [done, setDone] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.autoRead && files.length && !autoStarted.current && !readOnly) {
+      autoStarted.current = true;
+      navigate('.', { replace: true, state: null });
+      read();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (readOnly) return <p className="text-sm text-muted-foreground">Seu acesso a este projeto é somente leitura.</p>;
 
