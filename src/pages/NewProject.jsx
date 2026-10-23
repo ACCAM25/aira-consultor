@@ -20,7 +20,6 @@ export default function NewProject() {
   const [docs, setDocs] = useState([]);
   const [docError, setDocError] = useState(null);
   const [draftId, setDraftId] = useState(null);
-  const [sectorTouched, setSectorTouched] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [ai, setAi] = useState(null); // { result, files }
   const [form, setForm] = useState({ name: '', client_name: '', sector: 'privado', object_type: '', demand: {}, executive_question: '', question_checks: {}, mode: '', start_date: '', end_date: '' });
@@ -31,7 +30,7 @@ export default function NewProject() {
 
   const canNext = useMemo(() => [
     form.name.trim() && form.client_name.trim(),
-    !!form.object_type || docs.length > 0,
+    !!form.object_type,
     form.executive_question.trim().length > 10 || docs.length > 0,
     !!form.mode,
     !!form.start_date && !!form.end_date && form.end_date >= form.start_date,
@@ -53,7 +52,7 @@ export default function NewProject() {
     try {
       let id = draftId;
       if (!id) {
-        const draft = await createProject({ name: form.name.trim() || 'Projeto em preparação', client_name: form.client_name.trim() || 'Cliente a definir', sector: form.sector, current_phase: 'F0', canon_version: CANON_VERSION, canon_hash: await canonHash(), config: { draft: true } });
+        const draft = await createProject({ name: form.name.trim() || 'Projeto em preparação', client_name: form.client_name.trim() || 'Cliente a definir', sector: form.sector, current_phase: 'F0', canon_version: CANON_VERSION, canon_hash: await canonHash(), config: { draft: true, object_type: form.object_type } });
         id = draft.id; setDraftId(id);
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
@@ -62,17 +61,13 @@ export default function NewProject() {
         uploaded = [];
         for (const d of docs) uploaded.push(await uploadProjectFile(id, d));
       }
-      const result = await readDocuments(id, uploaded.map(f => ({ path: f.path, name: f.name })));
+      const result = await readDocuments(id, uploaded.map(f => ({ path: f.path, name: f.name })), { objectType: form.object_type });
       const p = result.proposals || {};
       setForm(f => {
         const demand = { ...f.demand };
         Object.entries(p.demanda || {}).forEach(([k, v]) => { if (v?.resposta && !String(demand[k] || '').trim()) demand[k] = v.resposta; });
         return {
           ...f, demand,
-          name: f.name.trim() ? f.name : (p.projeto?.nome?.valor || ''),
-          client_name: f.client_name.trim() ? f.client_name : (p.projeto?.cliente?.valor || ''),
-          sector: !sectorTouched && p.projeto?.setor?.valor ? p.projeto.setor.valor : f.sector,
-          object_type: f.object_type || p.tipo_objeto || '',
           executive_question: f.executive_question.trim() ? f.executive_question : (p.pergunta_executiva?.texto || ''),
         };
       });
@@ -108,8 +103,8 @@ export default function NewProject() {
 
   const docsPanel = (
               <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Sparkles className="h-4 w-4" />Começar pelas entrevistas e documentos (opcional)</p>
-                <p className="mt-1 text-sm text-blue-950/80">Anexe as entrevistas, atas ou transcrições e clique em Preencher com o AIra. Ele preenche cada campo que os documentos responderem, mostrando o trecho de origem; o que não encontrar fica em branco para você completar. Evidências, pessoas, gaps e pendências chegam para revisão depois de criar o projeto.</p>
+                <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Sparkles className="h-4 w-4" />Preencher a partir de entrevistas e documentos (opcional)</p>
+                <p className="mt-1 text-sm text-blue-950/80">Anexe as entrevistas, atas ou transcrições e clique em Preencher com o AIra. Ele responde as perguntas abaixo com o que os documentos disserem, mostrando o trecho de origem; o que não encontrar fica em branco para você completar. Também propõe a pergunta executiva da próxima etapa. Evidências, pessoas, gaps e pendências chegam para revisão depois de criar o projeto.</p>
                 {docs.length > 0 && <ul className="mt-3 space-y-1.5">{docs.map((d, i) => (
                   <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-1.5 text-sm"><span className="flex min-w-0 items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{d.name}</span></span><button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} aria-label="Remover" className="rounded p-1 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></li>
                 ))}</ul>}
@@ -123,7 +118,7 @@ export default function NewProject() {
                   <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-blue-200 pt-3">
                     <Btn type="button" onClick={fillWithAi} disabled={aiBusy}>{aiBusy ? <Loader2 className="animate-spin" /> : <Sparkles />}{aiBusy ? 'Lendo os documentos…' : ai ? 'Ler de novo' : 'Preencher com o AIra'}</Btn>
                     {aiBusy && <span className="text-xs text-blue-950/70">Pode levar até 2 minutos.</span>}
-                    {ai && !aiBusy && <span className="flex items-center gap-1.5 text-sm text-emerald-800"><Check className="h-4 w-4" />Campos preenchidos onde os documentos responderam. Revise em cada etapa.</span>}
+                    {ai && !aiBusy && <span className="flex items-center gap-1.5 text-sm text-emerald-800"><Check className="h-4 w-4" />Respostas preenchidas onde os documentos trataram do assunto. Revise abaixo.</span>}
                   </div>
                 )}
                 {docError && <p className="mt-2 text-sm text-rose-700">{docError.message}</p>}
@@ -131,8 +126,6 @@ export default function NewProject() {
   );
 
   const missing = value => (ai && !String(value || '').trim() ? 'Não encontrado nos documentos: preencha manualmente.' : undefined);
-  const aiHint = (src, value) => (src?.fonte?.trecho && value && value === (src.valor ?? src.resposta ?? src.texto) ? `AIra, de ${src.fonte.documento}: “${src.fonte.trecho}”` : undefined);
-  const aiClass = (src, value) => (src && value && value === (src.valor ?? src.resposta ?? src.texto) ? 'border-blue-300 bg-blue-50/40' : undefined);
   const pp = ai?.result?.proposals || {};
 
   return (
@@ -152,13 +145,12 @@ export default function NewProject() {
           {step === 0 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">Quem é o cliente e qual é o projeto?</h1><p className="mt-1 text-sm text-muted-foreground">Passo 1 do método: qualificar a demanda.</p></div>
-              {docsPanel}
-              <Field label="Nome do projeto" required hint={aiHint(pp.projeto?.nome, form.name) || missing(form.name)}><TextInput className={aiClass(pp.projeto?.nome, form.name)} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex.: Governança de IA generativa na produção de atos" /></Field>
-              <Field label="Organização cliente" required hint={aiHint(pp.projeto?.cliente, form.client_name) || missing(form.client_name)}><TextInput className={aiClass(pp.projeto?.cliente, form.client_name)} value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Ex.: Tribunal de Justiça do Maranhão" /></Field>
-              <Field label="Setor" group hint={pp.projeto?.setor?.valor ? `AIra, de ${pp.projeto.setor.fonte?.documento}: “${pp.projeto.setor.fonte?.trecho}”` : undefined}>
+              <Field label="Nome do projeto" required><TextInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex.: Governança de IA generativa na produção de atos" /></Field>
+              <Field label="Organização cliente" required><TextInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Ex.: Tribunal de Justiça do Maranhão" /></Field>
+              <Field label="Setor" group>
                 <div className="grid grid-cols-2 gap-2">
                   {[['privado', 'Privado'], ['publico', 'Público']].map(([id, name]) => (
-                    <button type="button" key={id} onClick={() => { set('sector', id); setSectorTouched(true); }} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.sector === id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{name}</button>
+                    <button type="button" key={id} onClick={() => set('sector', id)} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.sector === id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{name}</button>
                   ))}
                 </div>
               </Field>
@@ -169,14 +161,14 @@ export default function NewProject() {
           {step === 1 && (
             <div className="space-y-5">
               <div><h1 className="text-xl font-semibold">O que está em jogo?</h1><p className="mt-1 text-sm text-muted-foreground">Responda o que já souber. Lacunas ficam registradas como pendências, sem problema.</p></div>
-              {!ai && docs.length > 0 && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-900">Você anexou documentos sem pedir a leitura. Volte à etapa anterior e clique em Preencher com o AIra, ou continue: a leitura acontece ao criar o projeto.</p>}
-              <Field label="Tipo de objeto" required={!docs.length} group hint={missing(form.object_type)}>
+              <Field label="Tipo de objeto" required group>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {OBJECT_TYPES.map(o => (
                     <button type="button" key={o.id} onClick={() => set('object_type', o.id)} className={cn('rounded-xl border px-4 py-3 text-left text-sm', form.object_type === o.id ? 'border-primary bg-primary/5 font-semibold' : 'border-input hover:bg-muted')}>{o.name}</button>
                   ))}
                 </div>
               </Field>
+              {form.object_type ? docsPanel : <p className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">Escolha o tipo de objeto. Em seguida você pode anexar entrevistas e atas para o AIra preencher as respostas abaixo.</p>}
               {DEMAND_QUESTIONS.map(q => {
                 const src = ai?.result?.proposals?.demanda?.[q.id];
                 const fromAi = src?.resposta && form.demand[q.id] === src.resposta;
