@@ -56,14 +56,20 @@ export async function extractWithClaude<T>({ system, prompt, files, schema, maxT
     try { const block = await toDocumentBlock(f); if (block) content.push(block); else unreadable.push(f.name); } catch { unreadable.push(f.name); }
   }
   if (!content.length) throw new Error('Nenhum dos arquivos pôde ser lido. Use PDF, DOCX ou TXT com texto selecionável.');
-  content.push({ type: 'text', text: prompt });
+  content.push({ type: 'text', text: prompt + '\n\nResponda chamando a ferramenta registrar_propostas uma única vez, com todas as propostas.' });
   const body = await call({
     max_tokens: maxTokens, system,
-    tools: [{ name: 'registrar_propostas', description: 'Registra as propostas extraídas dos documentos.', input_schema: schema }],
-    tool_choice: { type: 'tool', name: 'registrar_propostas' },
+    tools: [{ name: 'registrar_propostas', description: 'Registra as propostas extraídas dos documentos. Use sempre esta ferramenta para responder.', input_schema: schema }],
+    tool_choice: { type: 'auto' },
     messages: [{ role: 'user', content }],
   });
   const use = (body.content || []).find((b: { type: string }) => b.type === 'tool_use');
-  if (!use) throw new Error('A IA não devolveu propostas estruturadas.');
+  if (!use) {
+    // Plano B: o modelo respondeu em texto; tenta extrair o JSON.
+    const text = (body.content || []).filter((b: { type: string }) => b.type === 'text').map((b: { text: string }) => b.text).join('\n');
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) { try { return { result: JSON.parse(match[0]) as T, unreadable }; } catch { /* segue para o erro */ } }
+    throw new Error('A IA não devolveu propostas estruturadas. Tente de novo.');
+  }
   return { result: use.input as T, unreadable };
 }

@@ -47,7 +47,7 @@ const SCHEMA = {
       titulo: { type: 'string' }, tipo: { type: 'string', enum: ['operacional', 'maturidade'] },
       processo: { type: 'string' }, descricao: { type: 'string' },
       confirmacao: { type: 'string', enum: ['confirmada', 'percebida'] },
-      unidade: { type: 'string' }, dimensao_valor: { type: ['number', 'null'] }, dimensao_conta: { type: 'string' },
+      unidade: { type: 'string', description: 'Unidade de medida do número, como horas/dia, chamados/mês, R$/ano.' }, dimensao_valor: { type: ['number', 'null'], description: 'Somente se o número estiver escrito no documento.' }, dimensao_conta: { type: 'string', description: 'De onde vem o número, citando a fonte.' },
       causa: { type: 'string' }, consequencia: { type: 'string' }, fonte: quote,
     }, required: ['titulo', 'tipo', 'confirmacao', 'fonte'] } },
     pendencias: { type: 'array', items: { type: 'object', properties: {
