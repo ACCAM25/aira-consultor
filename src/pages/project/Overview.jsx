@@ -70,6 +70,7 @@ export default function Overview() {
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Pill tone="blue">{mode?.name}</Pill>
           {project.start_date && <Pill>{fmtDate(project.start_date)} a {fmtDate(project.end_date)}</Pill>}
+          <Link to="leitura" className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-900 ring-1 ring-inset ring-blue-200 hover:bg-blue-100"><Sparkles className="h-3 w-3" />Ler documentos com o AIra</Link>
         </div>
       </div>
 

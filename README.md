@@ -12,7 +12,7 @@ Sistema de gestão de projetos conduzidos com o método AIra (cânone 3.0, Manua
 - **Dossiê e handoff**: montado a partir dos registros, com revisão de qualidade, Termo de Conclusão e encerramento formal. Imprime ou salva em PDF.
 - **Equipe**: líder, consultor, revisor e cliente (somente leitura), por projeto.
 - **Perfil setor público**: critérios adicionais (autoridade formal, controle externo, LGPD, Lei 14.133) sobre o mesmo cânone.
-- **Assistente AIra (Claude)**: revisão da pergunta executiva e rascunho do entregável da fase.
+- **Assistente AIra (Claude)**: revisão da pergunta executiva, rascunho do entregável da fase e **leitura de documentos** (entrevistas, atas, transcrições), que propõe qualificação da demanda, evidências, pessoas, gaps e pendências com o trecho de origem; nada entra sem revisão.
 
 ## Onde está cada regra
 
@@ -30,7 +30,7 @@ Mudou o cânone? Altere esses arquivos: a impressão digital muda e projetos ant
 |---|---|---|
 | Front-end (React + Vite + Tailwind) | Vercel | `src/` |
 | Banco, login, arquivos e RLS | Supabase `aira-consultor` (São Paulo) | `supabase/migrations/` |
-| Assistente de IA | Supabase Edge Function `aira-assist` | `supabase/functions/` |
+| Assistente de IA | Supabase Edge Functions `aira-assist` e `aira-extract` | `supabase/functions/` |
 
 Secrets do Supabase (Edge Functions > Secrets): `ANTHROPIC_API_KEY` (obrigatório para o assistente) e `ANTHROPIC_MODEL` (opcional).
 

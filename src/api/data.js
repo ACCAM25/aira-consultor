@@ -112,6 +112,16 @@ export async function openProjectFile(path) {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
+export async function readDocuments(projectId, files) {
+  const { data, error } = await supabase.functions.invoke('aira-extract', { body: { projectId, files } });
+  if (error) {
+    let message = error.message;
+    try { const payload = await error.context?.json?.(); if (payload?.error) message = payload.error; } catch { /* sem corpo */ }
+    throw new Error(message || 'A leitura dos documentos falhou.');
+  }
+  return data;
+}
+
 export async function askAira(action, projectId, extra = {}) {
   const { data, error } = await supabase.functions.invoke('aira-assist', { body: { action, projectId, ...extra } });
   if (error) {

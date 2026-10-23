@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useParams } from 'react-router-dom';
-import { BookOpenCheck, CircleAlert, FileSearch, FileText, GitBranch, Gavel, LayoutDashboard, Route, Send, Settings2, ShieldCheck, Target, Users, Wrench } from 'lucide-react';
+import { BookOpenCheck, CircleAlert, ScanText, FileSearch, FileText, GitBranch, Gavel, LayoutDashboard, Route, Send, Settings2, ShieldCheck, Target, Users, Wrench } from 'lucide-react';
 import AppShell from '@/components/aira/AppShell';
 import { ErrorNote, Loading, Pill } from '@/components/aira/kit';
 import { useMyRole, useProject, useRecords } from '@/api/data';
@@ -13,6 +13,7 @@ const NAV = [
     { to: 'jornada', label: 'Jornada F0–F6', icon: Route },
     { to: 'configuracao', label: 'Configuração', icon: Settings2 },
     { to: 'pessoas', label: 'Pessoas e equipe', icon: Users },
+    { to: 'leitura', label: 'Ler documentos (IA)', icon: ScanText },
   ] },
   { group: 'Registros', items: [
     { to: 'evidencias', label: 'Evidências', icon: FileSearch, kind: 'evidencia' },

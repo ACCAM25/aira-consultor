@@ -19,6 +19,7 @@ import Settings from '@/pages/project/Settings';
 import People from '@/pages/project/People';
 import RegisterPage from '@/pages/project/RegisterPage';
 import Dossier from '@/pages/project/Dossier';
+import DocumentReader from '@/pages/project/DocumentReader';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
                 <Route path="configuracao" element={<Settings />} />
                 <Route path="pessoas" element={<People />} />
                 <Route path="dossie" element={<Dossier />} />
+                <Route path="leitura" element={<DocumentReader />} />
                 <Route path=":register" element={<RegisterPage />} />
               </Route>
             </Route>

@@ -35,4 +35,4 @@ export function handle(fn: (req: Request) => Promise<Response>) {
   };
 }
 
-export const BUCKET = 'case-files';
+export const BUCKET = 'project-files';
