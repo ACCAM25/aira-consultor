@@ -65,7 +65,7 @@ export default function NewProject() {
       const p = result.proposals || {};
       setForm(f => {
         const demand = { ...f.demand };
-        Object.entries(p.demanda || {}).forEach(([k, v]) => { if (v?.resposta && !String(demand[k] || '').trim()) demand[k] = v.resposta; });
+        Object.entries(p.demanda || {}).forEach(([k, v]) => { const text = typeof v === 'string' ? v : v?.resposta; if (text && !String(demand[k] || '').trim()) demand[k] = text; });
         return {
           ...f, demand,
           executive_question: f.executive_question.trim() ? f.executive_question : (p.pergunta_executiva?.texto || ''),

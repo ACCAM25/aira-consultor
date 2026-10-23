@@ -4,7 +4,8 @@ import { extractWithClaude, type SourceFile } from '../_shared/claude.ts';
 const SYSTEM = `Você lê documentos de projetos (entrevistas, atas, transcrições, relatórios, políticas) para o método AIra, cânone 3.0, e propõe registros para um consultor revisar. Escreva em português do Brasil.
 Regras que você nunca viola:
 - Use SOMENTE o que está escrito nos documentos. Cada proposta traz o nome do documento e um trecho literal curto (até 300 caracteres) que a sustenta. Sem trecho, não proponha.
-- Para cada campo, responda quando o documento tratar do assunto, mesmo com outras palavras (por exemplo, "quem bate o martelo" responde quem tem autoridade para decidir). Se nada no documento tratar do campo, omita o campo: ele ficará em branco para preenchimento manual. Nunca preencha por suposição.
+- Para cada campo, responda quando o documento tratar do assunto, mesmo com outras palavras ou de forma indireta (por exemplo, "quem bate o martelo" responde quem tem autoridade para decidir; uma pergunta "Como poderíamos…" ou um desafio declarado indica o que se pretende decidir; normas citadas com dever de cumprimento indicam prazo regulatório). Você pode sintetizar e combinar trechos de documentos diferentes, desde que cite o trecho principal. Só omita o campo quando nenhum trecho tratar do tema: ele ficará em branco para preenchimento manual. Nunca preencha por suposição sem trecho.
+- Documentos de oficina (PESTL, matriz, canvas, árvore de problemas, imersão) valem como fonte: o "cliente" é a organização ou o setor tratado neles.
 - Nunca invente, estime ou arredonde números. Dimensão de gap só quando o número estiver escrito; caso contrário deixe em branco e crie uma pendência dizendo qual dado levantar.
 - Declaração de entrevistado orienta investigação, não comprova: evidência de entrevista ou workshop tem confiança "baixo" (relato isolado) ou "medio" (corroborado por mais de uma fonte). "alto" só para documento formal, atual e autorizado.
 - Registre divergências entre fontes sem escolher silenciosamente uma delas.
@@ -72,6 +73,38 @@ const SCHEMA = {
   required: ['resumo', 'demanda', 'evidencias', 'pessoas', 'gaps', 'pendencias'],
 };
 
+// Aceita variações de formato que o modelo às vezes devolve (texto solto, lista, nomes de chave diferentes).
+const DEMAND_ALIASES: Record<string, string[]> = {
+  decidir: ['decidir', 'decisao', 'o_que_decidir'], objeto: ['objeto', 'problema', 'objeto_em_pauta'], afetados: ['afetados', 'afetado', 'quem_afetado'],
+  autoridade: ['autoridade', 'autoridade_decisoria', 'quem_decide'], evidencias: ['evidencias', 'evidencias_existentes'], prazo: ['prazo', 'prazos'], expectativa: ['expectativa', 'orientacao_ou_execucao'],
+};
+function asAnswer(v: unknown): { resposta: string; fonte?: unknown } | null {
+  if (!v) return null;
+  if (typeof v === 'string') return v.trim() ? { resposta: v.trim() } : null;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    const text = o.resposta ?? o.texto ?? o.valor ?? o.answer ?? o.response;
+    if (typeof text === 'string' && text.trim()) return { resposta: text.trim(), fonte: o.fonte ?? o.source };
+  }
+  return null;
+}
+function normalize(raw: Record<string, unknown> | null): Record<string, any> {
+  const r: Record<string, any> = { ...(raw || {}) };
+  let d: any = r.demanda ?? r.qualificacao ?? r.demanda_qualificacao ?? {};
+  if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = {}; } }
+  if (Array.isArray(d)) d = Object.fromEntries(d.map((x: any) => [String(x?.id ?? x?.chave ?? x?.pergunta ?? ''), x]));
+  const out: Record<string, unknown> = {};
+  for (const [key, aliases] of Object.entries(DEMAND_ALIASES)) {
+    const found = aliases.map(a => d?.[a]).find(Boolean)
+      ?? Object.entries(d || {}).find(([k]) => k.toLowerCase().includes(key) || (DEMAND[key] && k === DEMAND[key]))?.[1];
+    const a = asAnswer(found);
+    if (a) out[key] = a;
+  }
+  r.demanda = out;
+  for (const k of ['evidencias', 'pessoas', 'gaps', 'pendencias']) if (!Array.isArray(r[k])) r[k] = [];
+  return r;
+}
+
 Deno.serve(handle(async (req) => {
   const ctx = await userContext(req);
   if (!ctx) return json({ error: 'Acesso não autorizado.' }, 401);
@@ -105,5 +138,7 @@ Leia os documentos anexados e proponha registros conforme o schema.
 Prioridade 1: responda cada uma das 7 perguntas de qualificação da demanda (campo demanda) que os documentos tratarem, mesmo indiretamente, considerando o tipo de objeto escolhido. Pergunta sem base nos documentos fica de fora. Nas evidências, gaps e pendências, seja seletivo: prefira poucas propostas bem sustentadas a muitas fracas. Proponha pergunta executiva só se a atual estiver vazia ou claramente inadequada.`;
 
   const { result, unreadable } = await extractWithClaude<Record<string, unknown>>({ system: SYSTEM, prompt, files: sources, schema: SCHEMA });
-  return json({ proposals: result, unreadable, files: sources.map(s => s.name) });
+  const proposals = normalize(result);
+  console.log('aira-extract', JSON.stringify({ chaves: Object.keys(result || {}), demanda_bruta: result?.demanda, demanda: Object.keys(proposals.demanda || {}) }).slice(0, 6000));
+  return json({ proposals, unreadable, files: sources.map(s => s.name) });
 }));
