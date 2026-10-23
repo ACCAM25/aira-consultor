@@ -64,6 +64,7 @@ export async function extractWithClaude<T>({ system, prompt, files, schema, maxT
     messages: [{ role: 'user', content }],
   });
   const use = (body.content || []).find((b: { type: string }) => b.type === 'tool_use');
+  console.log('claude', JSON.stringify({ stop: body.stop_reason, blocos: (body.content || []).map((b: { type: string }) => b.type), uso: body.usage }));
   if (!use) {
     // Plano B: o modelo respondeu em texto; tenta extrair o JSON.
     const text = (body.content || []).filter((b: { type: string }) => b.type === 'text').map((b: { text: string }) => b.text).join('\n');
