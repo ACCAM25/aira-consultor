@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Check, FileText, Loader2, Sparkles, Upload, X } 
 import { useQueryClient } from '@tanstack/react-query';
 import AppShell from '@/components/aira/AppShell';
 import { Btn, CheckRow, ErrorNote, Field, Pill, TextArea, TextInput } from '@/components/aira/kit';
-import { createProject, uploadProjectFile } from '@/api/data';
+import { createProject, readDocuments, updateProjectById, uploadProjectFile } from '@/api/data';
 import { CANON_VERSION, DEMAND_QUESTIONS, MODES, OBJECT_TYPES, defaultModules, QUESTION_EXAMPLES, QUESTION_TESTS, canonHash } from '@/canon/aira';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,9 @@ export default function NewProject() {
   const [error, setError] = useState(null);
   const [docs, setDocs] = useState([]);
   const [docError, setDocError] = useState(null);
+  const [draftId, setDraftId] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [ai, setAi] = useState(null); // { result, files }
   const [form, setForm] = useState({ name: '', client_name: '', sector: 'privado', object_type: '', demand: {}, executive_question: '', question_checks: {}, mode: '', start_date: '', end_date: '' });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const suggested = SUGGESTED_MODE[form.object_type];
@@ -40,22 +43,56 @@ export default function NewProject() {
     if (bad) return setDocError(new Error(`${bad.name}: use PDF, DOCX ou TXT de até 20 MB.`));
     if (docs.length + incoming.length > 6) return setDocError(new Error('Envie até 6 arquivos.'));
     setDocs(prev => [...prev, ...incoming]);
+    setAi(null);
+  }
+
+  // Cria o projeto como rascunho (em configuração), envia os documentos e preenche o formulário com as propostas.
+  async function fillWithAi() {
+    setDocError(null); setAiBusy(true);
+    try {
+      let id = draftId;
+      if (!id) {
+        const draft = await createProject({ name: form.name.trim(), client_name: form.client_name.trim(), sector: form.sector, current_phase: 'F0', canon_version: CANON_VERSION, canon_hash: await canonHash(), config: { draft: true } });
+        id = draft.id; setDraftId(id);
+        qc.invalidateQueries({ queryKey: ['projects'] });
+      }
+      let uploaded = ai?.files;
+      if (!uploaded || uploaded.length !== docs.length) {
+        uploaded = [];
+        for (const d of docs) uploaded.push(await uploadProjectFile(id, d));
+      }
+      const result = await readDocuments(id, uploaded.map(f => ({ path: f.path, name: f.name })));
+      const p = result.proposals || {};
+      setForm(f => {
+        const demand = { ...f.demand };
+        Object.entries(p.demanda || {}).forEach(([k, v]) => { if (v?.resposta && !String(demand[k] || '').trim()) demand[k] = v.resposta; });
+        return {
+          ...f, demand,
+          object_type: f.object_type || p.tipo_objeto || '',
+          executive_question: f.executive_question.trim() ? f.executive_question : (p.pergunta_executiva?.texto || ''),
+        };
+      });
+      setAi({ result, files: uploaded });
+    } catch (e) { setDocError(e); } finally { setAiBusy(false); }
   }
 
   async function finish() {
     setBusy(true); setError(null);
     try {
       const m = MODES.find(x => x.id === form.mode);
-      const project = await createProject({
+      const values = {
         name: form.name.trim(), client_name: form.client_name.trim(), sector: form.sector,
         executive_question: form.executive_question.trim() || null,
         start_date: form.start_date, end_date: form.end_date,
         current_phase: m.phases[0],
         canon_version: CANON_VERSION, canon_hash: await canonHash(),
         config: { mode: m.id, object_type: form.object_type, demand: form.demand, question_checks: form.question_checks, phases: m.phases, modules: defaultModules(m), exclusions: [], kickoff: {} },
-      });
+      };
+      const project = draftId ? await updateProjectById(draftId, values) : await createProject(values);
       qc.invalidateQueries({ queryKey: ['projects'] });
-      if (docs.length) {
+      if (ai) {
+        navigate(`/projetos/${project.id}/leitura`, { state: { files: ai.files, result: ai.result, demandApplied: true } });
+      } else if (docs.length) {
         const uploaded = [];
         for (const d of docs) uploaded.push(await uploadProjectFile(project.id, d));
         navigate(`/projetos/${project.id}/leitura`, { state: { files: uploaded, autoRead: true } });
@@ -110,6 +147,13 @@ export default function NewProject() {
                     <input type="file" multiple accept=".pdf,.docx,.txt,.md,.vtt,.srt" className="sr-only" onChange={e => { addDocs(e.target.files); e.target.value = ''; }} />
                   </label>
                 )}
+                {docs.length > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-blue-200 pt-3">
+                    <Btn type="button" onClick={fillWithAi} disabled={aiBusy}>{aiBusy ? <Loader2 className="animate-spin" /> : <Sparkles />}{aiBusy ? 'Lendo os documentos…' : ai ? 'Ler de novo' : 'Preencher com o AIra'}</Btn>
+                    {aiBusy && <span className="text-xs text-blue-950/70">Pode levar até 2 minutos.</span>}
+                    {ai && !aiBusy && <span className="flex items-center gap-1.5 text-sm text-emerald-800"><Check className="h-4 w-4" />Campos preenchidos. Revise abaixo; o restante (evidências, pessoas, gaps) aparece após criar o projeto.</span>}
+                  </div>
+                )}
                 {docError && <p className="mt-2 text-sm text-rose-700">{docError.message}</p>}
               </div>
               <Field label="Tipo de objeto" required={!docs.length} group>
@@ -119,9 +163,15 @@ export default function NewProject() {
                   ))}
                 </div>
               </Field>
-              {DEMAND_QUESTIONS.map(q => (
-                <Field key={q.id} label={q.text}><TextArea rows={2} value={form.demand[q.id] || ''} onChange={e => set('demand', { ...form.demand, [q.id]: e.target.value })} /></Field>
-              ))}
+              {DEMAND_QUESTIONS.map(q => {
+                const src = ai?.result?.proposals?.demanda?.[q.id];
+                const fromAi = src?.resposta && form.demand[q.id] === src.resposta;
+                return (
+                  <Field key={q.id} label={q.text} hint={fromAi && src.fonte?.trecho ? `AIra, de ${src.fonte.documento}: “${src.fonte.trecho}”` : undefined}>
+                    <TextArea rows={2} className={fromAi ? 'border-blue-300 bg-blue-50/40' : undefined} value={form.demand[q.id] || ''} onChange={e => set('demand', { ...form.demand, [q.id]: e.target.value })} />
+                  </Field>
+                );
+              })}
             </div>
           )}
 

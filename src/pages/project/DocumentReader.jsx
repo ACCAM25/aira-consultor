@@ -48,9 +48,15 @@ export default function DocumentReader() {
   const [conf, setConf] = useState({});
   const [registerDocs, setRegisterDocs] = useState(true);
   const [done, setDone] = useState(null);
+  const [skipDemand, setSkipDemand] = useState(false);
 
   useEffect(() => {
-    if (location.state?.autoRead && files.length && !autoStarted.current && !readOnly) {
+    if (autoStarted.current || readOnly) return;
+    if (location.state?.result) {
+      autoStarted.current = true;
+      prepare(location.state.result, location.state.demandApplied);
+      navigate('.', { replace: true, state: null });
+    } else if (location.state?.autoRead && files.length) {
       autoStarted.current = true;
       navigate('.', { replace: true, state: null });
       read();
@@ -74,19 +80,25 @@ export default function DocumentReader() {
     } catch (e) { setError(e); } finally { setUploading(false); }
   }
 
-  async function read() {
-    setError(null); setReading(true); setDone(null);
-    try {
-      const data = await readDocuments(project.id, files.map(f => ({ path: f.path, name: f.name })));
-      const p = data.proposals || {};
-      const s = {};
+  function prepare(data, skip) {
+    const p = data.proposals || {};
+    const s = {};
+    if (!skip) {
       Object.keys(p.demanda || {}).forEach(k => { if (p.demanda[k]?.resposta) s[`demanda.${k}`] = !project.config?.demand?.[k]; });
       if (p.pergunta_executiva?.texto) s.pergunta = !project.executive_question;
       if (p.tipo_objeto) s.tipo = !project.config?.object_type;
-      ['evidencias', 'pessoas', 'gaps', 'pendencias'].forEach(k => (p[k] || []).forEach((_, i) => { s[`${k}.${i}`] = true; }));
-      setSel(s);
-      setConf(Object.fromEntries((p.evidencias || []).map((e, i) => [i, e.confianca])));
-      setResult(data);
+    }
+    ['evidencias', 'pessoas', 'gaps', 'pendencias'].forEach(k => (p[k] || []).forEach((_, i) => { s[`${k}.${i}`] = true; }));
+    setSel(s);
+    setConf(Object.fromEntries((p.evidencias || []).map((e, i) => [i, e.confianca])));
+    setSkipDemand(!!skip);
+    setResult(data);
+  }
+
+  async function read() {
+    setError(null); setReading(true); setDone(null);
+    try {
+      prepare(await readDocuments(project.id, files.map(f => ({ path: f.path, name: f.name }))), false);
     } catch (e) { setError(e); } finally { setReading(false); }
   }
 
@@ -152,7 +164,9 @@ export default function DocumentReader() {
   }
 
   const p = result?.proposals || {};
-  const demandEntries = Object.entries(p.demanda || {}).filter(([, v]) => v?.resposta);
+  const demandEntries = skipDemand ? [] : Object.entries(p.demanda || {}).filter(([, v]) => v?.resposta);
+  const showQuestion = !skipDemand && p.pergunta_executiva?.texto;
+  const showType = !skipDemand && p.tipo_objeto;
 
   return (
     <div className="pb-24">
@@ -198,8 +212,9 @@ export default function DocumentReader() {
             <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={registerDocs} onChange={e => setRegisterDocs(e.target.checked)} />Registrar cada documento enviado como evidência, com o arquivo anexado</label>
           </Panel>
 
-          <Section title="Qualificação da demanda" count={demandEntries.length + (p.pergunta_executiva?.texto ? 1 : 0) + (p.tipo_objeto ? 1 : 0)}>
-            {p.pergunta_executiva?.texto && (
+          {skipDemand && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">A qualificação da demanda e a pergunta executiva já foram preenchidas no cadastro do projeto. Revise abaixo o restante do que o AIra encontrou.</p>}
+          <Section title="Qualificação da demanda" count={demandEntries.length + (showQuestion ? 1 : 0) + (showType ? 1 : 0)}>
+            {showQuestion && (
               <Item checked={!!sel.pergunta} onChange={v => toggle('pergunta', v)}>
                 <p className="font-medium">Pergunta executiva</p>
                 <p className="mt-0.5">{p.pergunta_executiva.texto}</p>
@@ -207,7 +222,7 @@ export default function DocumentReader() {
                 {project.executive_question && <p className="mt-1 text-xs text-amber-700">Substitui a atual: “{project.executive_question}”</p>}
               </Item>
             )}
-            {p.tipo_objeto && (
+            {showType && (
               <Item checked={!!sel.tipo} onChange={v => toggle('tipo', v)}><p className="font-medium">Tipo de objeto: {nameOf(OBJECT_TYPES, p.tipo_objeto)}</p></Item>
             )}
             {demandEntries.map(([k, v]) => (

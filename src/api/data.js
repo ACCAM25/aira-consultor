@@ -56,6 +56,10 @@ export function useMyRole(projectId) {
   });
 }
 
+export async function updateProjectById(id, values) {
+  return check(await supabase.from('projects').update(values).eq('id', id).select().single());
+}
+
 export async function createProject(values) {
   return check(await supabase.from('projects').insert(values).select().single());
 }
