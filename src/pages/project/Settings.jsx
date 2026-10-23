@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Btn, CheckRow, ErrorNote, Field, PageTitle, Panel, Pill, Select, TextArea, TextInput } from '@/components/aira/kit';
 import AiraAssist from '@/components/aira/AiraAssist';
-import { useUpdateProject } from '@/api/data';
+import { deleteProject, useUpdateProject } from '@/api/data';
 import { DEMAND_QUESTIONS, DEPTHS, KICKOFF_CONDITIONS, MODES, MODULES, OBJECT_TYPES, PHASES, QUESTION_TESTS, VERIFICATION_STATES, defaultModules, modeById } from '@/canon/aira';
 import { kickoffProgress } from '@/canon/engine';
 
@@ -14,8 +15,22 @@ const pick = p => ({
 });
 
 export default function Settings() {
-  const { project, readOnly } = useOutletContext();
+  const { project, readOnly, role } = useOutletContext();
   const update = useUpdateProject(project.id);
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  async function removeProject() {
+    setDeleting(true); setDeleteError(null);
+    try {
+      await deleteProject(project.id);
+      qc.removeQueries({ queryKey: ['project', project.id] });
+      await qc.invalidateQueries({ queryKey: ['projects'] });
+      navigate('/', { replace: true });
+    } catch (e) { setDeleteError(e); setDeleting(false); }
+  }
   const [form, setForm] = useState(() => pick(project));
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState(null);
@@ -149,6 +164,19 @@ export default function Settings() {
               ? <Btn variant="outline" onClick={() => save({ status: 'em_andamento' })}>Retomar projeto</Btn>
               : <Btn variant="outline" onClick={() => save({ status: 'pausado' })}>Pausar projeto</Btn>}
             <p className="mt-2 text-xs text-muted-foreground">Encerramento é feito no Dossiê, com aceite e handoff.</p>
+          </Panel>
+        )}
+
+        {role === 'lider' && (
+          <Panel title="Excluir projeto">
+            <p className="text-sm text-muted-foreground">Apaga de forma definitiva o projeto, todos os registros, o histórico, a equipe e os arquivos anexados. Não há como desfazer. Para guardar o trabalho, encerre pelo Dossiê em vez de excluir.</p>
+            <div className="mt-4"><Field label={`Para confirmar, digite o nome do projeto: ${project.name}`}>
+              <TextInput value={confirmName} onChange={e => setConfirmName(e.target.value)} placeholder={project.name} />
+            </Field></div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Btn variant="danger" disabled={confirmName.trim() !== project.name.trim() || deleting} onClick={removeProject}>{deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}Excluir projeto definitivamente</Btn>
+              <ErrorNote error={deleteError} />
+            </div>
           </Panel>
         )}
       </div>

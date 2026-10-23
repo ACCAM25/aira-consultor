@@ -64,6 +64,21 @@ export async function createProject(values) {
   return check(await supabase.from('projects').insert(values).select().single());
 }
 
+// Exclusão definitiva: remove os arquivos do projeto e depois o projeto (registros, equipe e histórico saem em cascata).
+export async function deleteProject(projectId) {
+  for (;;) {
+    const { data, error } = await supabase.storage.from(BUCKET).list(projectId, { limit: 100 });
+    if (error) throw error;
+    if (!data?.length) break;
+    const { error: rmError } = await supabase.storage.from(BUCKET).remove(data.map(f => `${projectId}/${f.name}`));
+    if (rmError) throw rmError;
+    if (data.length < 100) break;
+  }
+  const { data, error } = await supabase.from('projects').delete().eq('id', projectId).select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Somente o líder do projeto pode excluí-lo.');
+}
+
 export function useUpdateProject(projectId) {
   const qc = useQueryClient();
   return useMutation({
