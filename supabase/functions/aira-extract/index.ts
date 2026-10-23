@@ -102,7 +102,7 @@ Pergunta executiva atual: ${project.executive_question || '(não definida)'}.
 Respostas já registradas da qualificação: ${JSON.stringify(project.config?.demand || {})}.
 
 Leia os documentos anexados e proponha registros conforme o schema.
-Prioridade 1: responda cada uma das 7 perguntas de qualificação da demanda (campo demanda) que os documentos tratarem, mesmo indiretamente, considerando o tipo de objeto escolhido. Pergunta sem base nos documentos fica de fora. Seja seletivo: prefira poucas propostas bem sustentadas a muitas fracas. Proponha pergunta executiva só se a atual estiver vazia ou claramente inadequada.`;
+Prioridade 1: responda cada uma das 7 perguntas de qualificação da demanda (campo demanda) que os documentos tratarem, mesmo indiretamente, considerando o tipo de objeto escolhido. Pergunta sem base nos documentos fica de fora. Nas evidências, gaps e pendências, seja seletivo: prefira poucas propostas bem sustentadas a muitas fracas. Proponha pergunta executiva só se a atual estiver vazia ou claramente inadequada.`;
 
   const { result, unreadable } = await extractWithClaude<Record<string, unknown>>({ system: SYSTEM, prompt, files: sources, schema: SCHEMA });
   return json({ proposals: result, unreadable, files: sources.map(s => s.name) });
